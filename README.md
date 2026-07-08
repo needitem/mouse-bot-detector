@@ -906,8 +906,29 @@ Pure replay is on-manifold but finite (repeats); anything that manufactures
 diversity — averaging, perturbing, or stitching segments — steps off the
 manifold and the single-movement detector catches it. Having "unlimited
 diversity AND perfectly human" would require either infinite real data or a
-perfect generative model, and the flow experiments already showed the latter
-plateaus at ~0.85.
+perfect generative model — and the perfect generative model does not exist on
+finite data.
+
+### The generative model is not the missing piece (any architecture plateaus at ~0.85)
+
+The obvious objection is that a *better* generator would fool the single-move
+detector. It doesn't — the ~0.85 wall is architecture-independent, so it is the
+finite-data generalization gap, not a modeling weakness
+(`diffusion_generator.py`):
+
+| generator | strong-detector shape_only |
+|---|---|
+| high-k GMM (density model) | 0.855 |
+| RealNVP flow (MLE + adversarial) | 0.81–0.86 |
+| **DDPM diffusion (current SOTA)** | **0.862** |
+
+A classical density model, a normalizing flow, and a diffusion model — three
+generations of generative modeling — all land in the same 0.85–0.86 band. With
+8000 real strokes none of them learns the human manifold tightly enough to
+close the gap a strong classifier reads. So a *generative* attacker buys
+unlimited diversity (defeating every reuse/aggregate detector) but pays ~0.85
+single-move, versus replay's 0.5-but-finite — and no amount of model capacity
+moves that price.
 
 **So the honest bottom line:** without more real data, the attacker cannot win
 the trajectory-statistics game against an ideal aggregating defender. What the
