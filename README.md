@@ -916,19 +916,40 @@ detector. It doesn't — the ~0.85 wall is architecture-independent, so it is th
 finite-data generalization gap, not a modeling weakness
 (`diffusion_generator.py`):
 
-| generator | strong-detector shape_only |
-|---|---|
-| high-k GMM (density model) | 0.855 |
-| RealNVP flow (MLE + adversarial) | 0.81–0.86 |
-| **DDPM diffusion (current SOTA)** | **0.862** |
+| generator | training data | strong-detector shape_only |
+|---|---|---|
+| high-k GMM (density model) | 8k | 0.855 |
+| RealNVP flow (MLE + adversarial) | 8k | 0.81–0.86 |
+| DDPM diffusion | 8k | 0.862 |
+| DDPM diffusion | 16k (2× data) | 0.848 |
+| **DMTG** (entropy-controlled diffusion, published SOTA) | **1,000,000** | **0.87–0.91** |
 
-A classical density model, a normalizing flow, and a diffusion model — three
-generations of generative modeling — all land in the same 0.85–0.86 band. With
-8000 real strokes none of them learns the human manifold tightly enough to
-close the gap a strong classifier reads. So a *generative* attacker buys
-unlimited diversity (defeating every reuse/aggregate detector) but pays ~0.85
-single-move, versus replay's 0.5-but-finite — and no amount of model capacity
-moves that price.
+A classical density model, a normalizing flow, and two diffusion models — three
+generations of generative modeling — all land in the same 0.85–0.91 band, and
+doubling the data (8k→16k) barely moves it (0.862→0.848). The published SOTA,
+**DMTG** (Entropy-Controlled Diffusion, arXiv:2410.18233), trains on **one
+million** trajectories and still reports 87–91% white-box discriminator accuracy
+— its headline "4.75–9.73% reduction" is relative to GAN/SapiAgent baselines at
+~99%, not an absolute escape. So the ~0.85 ceiling is architecture-, capacity-,
+AND data-independent: it's the finite-data generalization gap, not a modeling
+weakness. A *generative* attacker buys unlimited diversity (defeating every
+reuse/aggregate detector) but pays ~0.85 single-move, versus replay's
+0.5-but-finite — and no model, no matter how large, moves that price.
+
+### The ceiling above the ceiling: this is only the trajectory layer
+
+All of the above — replay, generation, the whole arms race — lives at **layer 1:
+is this *trajectory* human-like?** That is a *necessary* condition, not a
+sufficient one. A real interaction is a stack: reaction time to a stimulus,
+aim imperfection and correction, session-level variation (fatigue, misses),
+cross-modal consistency (mouse + keyboard + view), and causal response to a
+moving/unpredictable target. DMTG hits the same wall for the same reason — it is
+a path generator, not an *intent* generator. A defender who checks "did this
+motion arise from a genuine, in-context user intention on this screen right now"
+(DOM causality, session flow, challenge-response) is playing a different game
+that trajectory statistics cannot reach. Winning layer 1 (which this project
+maps out completely) is table stakes; layers 2–6 are where a real
+attacker/defender contest is actually decided, and they are out of scope here.
 
 **So the honest bottom line:** without more real data, the attacker cannot win
 the trajectory-statistics game against an ideal aggregating defender. What the
