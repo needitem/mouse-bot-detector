@@ -832,3 +832,55 @@ works if the defender has the pool, so build the DB from your own recordings),
 fingerprints), and most robustly **challenge-response** (unpredictable / moving
 targets that a pre-recorded stroke can't react to). Static aim-trajectory
 statistics alone cannot cover replay — that is a property of the signal.
+
+---
+
+# The arms race: attacker vs. defender, played to convergence
+
+The sections above establish that a single warped-replay flick is
+indistinguishable from a real one (0.506). That is not the end — it is the
+opening move. Iterating the attacker and the defender against each other,
+each answering the other's last move, converges to a clear winner. Every row
+below is a script in `scripts/` and a number in `results/`.
+
+| # | move | result |
+|---|---|---|
+| 1 | **defender:** single-movement strong detector | warped replay **0.506** — evades |
+| 2 | **defender:** + near-duplicate, set-level (`detect_replay_reuse.py`) | finite pool repeats caught; real-vs-real min distance 0.084 ≫ eps 0.059, **FP 0.000** |
+| 3 | **attacker:** gaussian jitter to break repeats (`detect_replay_dilemma.py`) | dilemma — small jitter → reuse-caught, large jitter → single-move-caught |
+| 4 | **attacker:** human-variability perturbation (`attack_manifold_perturb.py`, `attack_sweet_spot.py`) | mag≈0.07 evades **both** at once (single 0.54, reuse 0.00) |
+| 5 | **defender:** session nearest-neighbor **distribution** (`detect_replay_cluster.py`) | source clusters survive perturbation → caught at N≥500 (1.000 at N=1000) |
+| 6 | **attacker:** no-repeat, and drop the perturbation (`attack_norepeat.py`) | pure replay + distinct sources → session detector back to **~0.5** |
+| 7 | **defender:** long-horizon, N>K (`detect_longhorizon_crossaccount.py`) | finite pool exhausts → forced reuse → **1.00** once N>K |
+| 8 | **attacker:** enlarge K with more people | — |
+| 9 | **defender:** per-account **style consistency** (`detect_style_consistency.py`) | multi-person pool → within-account style variance → 0.83 (2 people) … 1.00 (10) |
+| 10 | **attacker:** 1-person pool (consistent) or rotate accounts | 1-person → small K → caught by #7; rotation → caught by #11 |
+| 11 | **defender:** cross-account linking (`detect_longhorizon_crossaccount.py`) | shared pool → same stroke across accounts → 0.10 (2 accts) … 0.86 (20); real **0.000** |
+
+## Winner: the defender — under aggregate observation
+
+The decisive asymmetry: an aimbot's attacker **cannot record in real time**
+(the bot is doing the aiming), so they are stuck with a **finite, pre-recorded
+pool**. Every way to hide that finiteness leaves a different structural trace:
+
+- reuse within a session → near-duplicate / session-distribution
+- exhausting the pool over time → long-horizon (N > K)
+- enlarging the pool with many people → per-account style variance
+- rotating accounts on a shared pool → cross-account near-duplicates
+- using a public dataset → nearest-DB matching
+
+The attacker's only escape is a **fresh, private, single-person pool per
+account, never observed past its size** — i.e. recording a new person's strokes
+for every account and retiring each account early. That is an unbounded cost,
+so the defender wins the aggregate game.
+
+## The honest caveat
+
+This is a win for the *defender who aggregates* — across a session's length,
+across time, across accounts. **In a single short session, the attacker still
+wins**: a handful of no-repeat warped-replay flicks is genuinely
+indistinguishable from a human (0.5). Real-time, per-flick detection does not
+work; the defender's leverage is entirely in observing enough. That is why the
+robust production answer remains **challenge-response** (unpredictable / moving
+targets a pre-recorded stroke can't react to), which defeats replay at the
+signal level rather than the statistics level — no aggregation required.

@@ -2,18 +2,22 @@
 """Export a warped-replay trajectory database for needaimbot's flick generator.
 
 Keeps only STRAIGHT, low-lateral-deviation human strokes (an aimbot flick
-should go roughly straight to the target, not wander up/down), canonicalizes
-each to start at the origin with its endpoint on the +x axis, and stores it
-with its real distance + real (irregular) timestamps. At runtime the C++
-warped-replay generator picks a stroke whose distance is close to the required
-reach, then rotates it to the aim direction and scales it to the exact reach.
+should go roughly straight to the target), resamples each to a FIXED 48 points
+(so the C++ generator can add a human-variability perturbation = the difference
+between two other real strokes, which requires a common dimension), and stores
+a UNIT canonical shape (origin -> (1,0)) plus its real distance and its real
+(point-index-resampled, so still irregular) timestamps.
 
-Filters:
-  - path_efficiency = straight_distance / path_length >= MIN_EFFICIENCY
-  - max lateral deviation / distance <= MAX_LATERAL   (no up/down wandering)
-  - sane distance and duration
-Output: flick_trajectories.json  { "unit":"px", "traj":[ {"d":dist,
-        "p":[[cx,cy,t_ms],...]}, ... ] }  sorted by distance for binary search.
+At runtime warped_replay.hpp picks a distance-matched stroke, adds
+`mag * (shape_a - shape_b)` for two random strokes (moves it along the manifold
+humans genuinely vary along, so it evades both the single-movement and the
+near-duplicate/reuse detector - see mouse-bot-detector's attack_sweet_spot.py:
+mag~0.07 gives single-move ~0.54 and reuse-detection ~0.00), then rotates and
+scales it onto the aim vector.
+
+Filters: path_efficiency >= MIN_EFFICIENCY, max lateral / distance <= MAX_LATERAL.
+Output: flick_trajectories.json  { "unit":"px", "n_pts":48, "traj":[ {"d":dist,
+        "s":[[ux,uy],...48], "t":[t_ms,...48]}, ... ] } sorted by distance.
 """
 import json
 import math
@@ -26,63 +30,61 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DATA = SCRIPT_DIR.parent / "data" / "processed" / "human_movements.jsonl"
 OUT = SCRIPT_DIR.parent / "flick_trajectories.json"
 
-MIN_EFFICIENCY = 0.90   # straight-distance / path-length
-MAX_LATERAL    = 0.10   # max |lateral| as fraction of reach distance
+N_PTS          = 48
+MIN_EFFICIENCY = 0.90
+MAX_LATERAL    = 0.10
 MIN_DIST       = 30.0
 MIN_DUR, MAX_DUR = 120.0, 1600.0
 MAX_KEEP       = 6000
 
 
-def canonical(pts):
+def canonical48(pts):
     p = np.asarray(pts, dtype=float)
     if len(p) < 5:
         return None
-    rel = p[:, :2] - p[0, :2]
-    t = p[:, 2] - p[0, 2]
-    dx, dy = rel[-1, 0], rel[-1, 1]
+    N = len(p)
+    xi = np.linspace(0, N - 1, N_PTS)              # resample by point index (keeps irregular timing)
+    ar = np.arange(N)
+    x = np.interp(xi, ar, p[:, 0]);  y = np.interp(xi, ar, p[:, 1]);  t = np.interp(xi, ar, p[:, 2])
+    x, y, t = x - x[0], y - y[0], t - t[0]
+    dx, dy = x[-1], y[-1]
     dist = math.hypot(dx, dy)
     dur = float(t[-1])
     if dist < MIN_DIST or not (MIN_DUR <= dur <= MAX_DUR):
         return None
-    seg = np.hypot(np.diff(rel[:, 0]), np.diff(rel[:, 1]))
+    seg = np.hypot(np.diff(x), np.diff(y))
     path_len = float(seg.sum())
-    if path_len <= 1e-6:
-        return None
-    eff = dist / path_len
-    if eff < MIN_EFFICIENCY:
+    if path_len <= 1e-6 or dist / path_len < MIN_EFFICIENCY:
         return None
     phi = math.atan2(dy, dx)
     c, s = math.cos(-phi), math.sin(-phi)
-    cx = rel[:, 0] * c - rel[:, 1] * s
-    cy = rel[:, 0] * s + rel[:, 1] * c
-    if np.max(np.abs(cy)) / dist > MAX_LATERAL:
+    ux = (x * c - y * s) / dist                     # unit canonical: endpoint at (1, 0)
+    uy = (x * s + y * c) / dist
+    if np.max(np.abs(uy)) > MAX_LATERAL:
         return None
-    # enforce monotone non-decreasing timestamps
     t = np.maximum.accumulate(t)
-    p_out = [[round(float(a), 2), round(float(b), 2), round(float(tt), 1)]
-             for a, b, tt in zip(cx, cy, t)]
-    return {"d": round(dist, 2), "p": p_out}
+    return {"d": round(dist, 2),
+            "s": [[round(float(a), 4), round(float(b), 4)] for a, b in zip(ux, uy)],
+            "t": [round(float(tt), 1) for tt in t]}
 
 
 def main():
-    kept = []
-    n_read = 0
+    kept, n_read = [], 0
     with open(DATA) as f:
         for line in f:
             n_read += 1
-            rec = canonical(json.loads(line)["points"])
+            rec = canonical48(json.loads(line)["points"])
             if rec is not None:
                 kept.append(rec)
             if len(kept) >= MAX_KEEP:
                 break
     kept.sort(key=lambda r: r["d"])
-    OUT.write_text(json.dumps({"unit": "px", "traj": kept}))
+    OUT.write_text(json.dumps({"unit": "px", "n_pts": N_PTS, "traj": kept}))
     ds = [r["d"] for r in kept]
-    print(f"[export] read {n_read}, kept {len(kept)} straight strokes "
+    print(f"[export] read {n_read}, kept {len(kept)} straight 48-pt strokes "
           f"(eff>={MIN_EFFICIENCY}, lateral<={MAX_LATERAL})")
     if ds:
-        print(f"[export] distance range {min(ds):.0f}-{max(ds):.0f}px, "
-              f"median {sorted(ds)[len(ds)//2]:.0f}px")
+        print(f"[export] distance range {min(ds):.0f}-{max(ds):.0f}px, median {sorted(ds)[len(ds)//2]:.0f}px")
         print(f"[export] wrote {OUT} ({OUT.stat().st_size/1024:.0f} KB)")
 
 
