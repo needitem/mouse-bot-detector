@@ -884,3 +884,35 @@ work; the defender's leverage is entirely in observing enough. That is why the
 robust production answer remains **challenge-response** (unpredictable / moving
 targets a pre-recorded stroke can't react to), which defeats replay at the
 signal level rather than the statistics level — no aggregation required.
+
+## Can the attacker escape without infinite data? No — the information limit
+
+The defender's aggregate win rests on the attacker's pool being **finite**. The
+obvious escape is to manufacture unlimited diversity from a finite pool. Every
+way of doing that was tried, and they all hit the same wall
+(`attack_segment_compose.py`, and earlier `knn_blend_generator.py` /
+`attack_manifold_perturb.py`):
+
+| method | near-duplicate (diversity) | single-move (on-manifold) |
+|---|---|---|
+| pure replay | fails (finite → repeats) | **passes** (0.5) |
+| kNN blend (average) | passes | **fails** 0.889 (averaging kills jerk) |
+| human-var perturbation | passes | leaves a session-distribution trace |
+| **segment composition** | **passes** (0.002 even at K=50) | **fails** 0.73→0.98 (the seam is the tell) |
+
+The trade-off is fundamental: **breaking near-duplicates (diversity) and passing
+single-move (staying on the human manifold) cannot both hold with finite data.**
+Pure replay is on-manifold but finite (repeats); anything that manufactures
+diversity — averaging, perturbing, or stitching segments — steps off the
+manifold and the single-movement detector catches it. Having "unlimited
+diversity AND perfectly human" would require either infinite real data or a
+perfect generative model, and the flow experiments already showed the latter
+plateaus at ~0.85.
+
+**So the honest bottom line:** without more real data, the attacker cannot win
+the trajectory-statistics game against an ideal aggregating defender. What the
+attacker *can* do is (1) pure no-repeat replay so every individual session is
+clean, (2) a large finite pool plus per-account usage caps and rotation to stay
+under a real anti-cheat's (limited) aggregation horizon, and (3) rely on systems
+that don't deploy challenge-response. It becomes an economics game — make
+detection cost more than it's worth — not a game the attacker can win outright.
