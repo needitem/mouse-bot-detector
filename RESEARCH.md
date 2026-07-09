@@ -1018,3 +1018,44 @@ human strokes. The productive frontier is therefore not a better trajectory
 generator (the trajectory layer is closed) but the behavioral layers above it
 (reaction, evoked tracking, challenge-response) — which is what the companion
 aim-rl-web-collector now gathers real human data for.
+
+---
+
+# Latent-space interpolation (GPU): the last distinct idea — best generator yet, wall still stands
+
+The one qualitatively new idea left after the mechanistic frontier: instead of
+sampling a learned prior (flow/GMM/diffusion → 0.86) or blending in POSITION
+space (kNN blend → 0.889, averaging kills the jerk), blend in the flow's LEARNED
+LATENT space. A RealNVP flow "unfolds" the curved data manifold into a Gaussian
+latent, so a straight line between two REAL strokes' latent codes
+(z=a·f(x1)+(1-a)·f(x2), decode f⁻¹(z)) should stay ON the manifold when decoded —
+novel (not a near-duplicate) yet human (unlike position-blend).
+
+Trained on an RTX 3060 (`latent_interp_generator.py`, 16-layer RealNVP, 2000
+epochs; the fixed canonicalization endpoints — point0=(0,0), point_last=(1,0) —
+must be dropped from the modeled vector or ActNorm's exp() conditioning blows the
+gradient up to ~1e10). Both modes scored by the same strong detector:
+
+| variant | strong-detector shape_only | all |
+|---|---|---|
+| **latent interpolation** | **0.843** | 1.000 |
+| latent prior (baseline) | 0.863 | 1.000 |
+
+**Latent interpolation (0.843) is the lowest non-replay generation number in the
+whole project** — below GMM (0.855), flow-prior (0.863), and kNN blend (0.889).
+The hypothesis was directionally right: interpolating in the unfolded latent stays
+more on-manifold than position-space blend (jerk 0.228 vs blend's smoothing, path
+efficiency 0.942). **But 0.843 is not 0.50** — it is within run-to-run noise of
+the GMM and still squarely inside the ~0.85 band, and `all`=1.000 shows the
+absolute geometry separates trivially.
+
+**This closes the trajectory layer.** The ~0.85 wall now spans every distinct
+approach tried — hand-tuned (0.99), high-k GMM (0.855), RealNVP flow prior (0.86),
+DDPM diffusion (0.86), DMTG's 1M-trajectory published SOTA (0.87–0.91),
+mechanistic sigma-lognormal and its real-residual / param-interpolation variants
+(0.88), kNN blend (0.889), and now flow-latent interpolation (0.843). Everything
+lands in [0.84, 0.91]. Genuine ~0.50 is reached ONLY by replaying real strokes
+(0.506). No generalizing generator — learned, mechanistic, or interpolative —
+crosses the finite-data fine-structure wall. The productive frontier is the
+behavioral layers above the trajectory (reaction, evoked tracking,
+challenge-response), not a better path generator.
