@@ -967,3 +967,54 @@ clean, (2) a large finite pool plus per-account usage caps and rotation to stay
 under a real anti-cheat's (limited) aggregation horizon, and (3) rely on systems
 that don't deploy challenge-response. It becomes an economics game — make
 detection cost more than it's worth — not a game the attacker can win outright.
+
+---
+
+# The mechanistic frontier: does a motor-control model escape the wall? (No)
+
+Every generator above is DATA-DRIVEN — it learns a distribution from finite
+samples and pays the ~0.85 generalization gap. That left one genuine escape
+hatch untried, the one this project scope-cut at the very start: a MECHANISTIC
+model that doesn't *learn* the human-motion manifold but *implements* the
+neuromuscular process that generates it (finite data then only calibrates a few
+physical parameters, so the gap that caps learned models should mostly vanish).
+
+The canonical model for exactly this domain is **Plamondon's Kinematic Theory of
+Rapid Movements** — the sigma-lognormal (Σ-Λ) model BeCAPTCHA-Mouse is built on.
+A rapid aimed movement's velocity is the vector sum of K lognormal impulse
+responses:
+
+    v(t) = Σ_i D_i · Λ(t; t0_i, μ_i, σ_i) · [cos φ_i(t), sin φ_i(t)]
+
+`sigma_lognormal_generator.py` fits this (K=1..3, nonlinear least squares on the
+velocity profile) to real human strokes, learns the joint distribution of the
+fitted impulse parameters, samples new parameter sets, and re-synthesizes. Two
+further variants (`sl_fit_cache.py` parallel-fits the pool once; `sl_synth.py`
+iterates synthesis): **SL + real fit-residual** (paste the REAL neuromuscular
+micro-texture — the detector's #1 tell — onto the synthetic macro, rescaled to
+local speed) and **SL parameter interpolation** (blend two real fits in the
+physically-meaningful parameter space, an on-manifold analogue of kNN blend).
+
+| variant | strong-detector shape_only | all |
+|---|---|---|
+| pure sigma-lognormal | 0.883 | 1.000 |
+| SL + real fit-residual | 0.885 | 1.000 |
+| SL param-interpolation + residual | 0.879 | 1.000 |
+
+**All three land in the same ~0.88 band — slightly WORSE than the high-k GMM's
+0.855.** Adding real (not synthesized) neuromuscular residual didn't move it;
+interpolating in the neuromuscular parameter space didn't move it. SL's own
+jerk_rms overshoots human (0.55 vs 0.33) and `all`=1.000 shows the absolute
+geometry still separates trivially — consistent with v3.1's proof that matching
+marginals can't move a joint-distribution detector.
+
+**Why this matters.** The ~0.85 wall was previously demonstrated only for learned
+generators, leaving open "a mechanistic model might escape." It doesn't. The wall
+now spans BOTH learned (GMM, flow, diffusion, DMTG) AND mechanistic
+(sigma-lognormal) generation. That is strong evidence it is a fundamental
+property of matching a finite-data manifold's fine structure — not a weakness of
+any single method family. Genuine ~0.50 remains reachable only by replaying real
+human strokes. The productive frontier is therefore not a better trajectory
+generator (the trajectory layer is closed) but the behavioral layers above it
+(reaction, evoked tracking, challenge-response) — which is what the companion
+aim-rl-web-collector now gathers real human data for.
