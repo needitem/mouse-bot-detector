@@ -1143,3 +1143,84 @@ error directly) should drop the floor toward 0.5 and the sigma~0.1 point toward
 break of replay's only weakness (finiteness). That remains the open thread; the
 wall for *from-scratch generation* stands, but latent-anchored replay is the first
 method to dent it while keeping diversity.
+
+---
+
+# Closing the open thread: the sigma=0 floor is NOT numerical — the "dent" was a weak-detector artifact
+
+The open thread above predicted that restoring **exact float64 invertibility**
+(the ActNorm/input clamps were blamed for a 0.608 reconstruction floor instead of
+0.5) would drop the sigma=0 floor toward 0.5 and the sigma~0.1 point toward
+"replay-grade AND diverse". We retrained the flow and tested it directly. **The
+prediction is false on both counts.**
+
+**Setup.** Retrained the same RealNVP (24 layers / 512 hidden, 8000 epochs, batch
+1024, lr 2e-4) on the A30 (`latent_anchor_invertible.py`), this time (a) saving
+the checkpoint, (b) generating every anchor by encoding/decoding in **float64**,
+and (c) printing the round-trip reconstruction MSE. Converged to **nll -399**
+(even deeper than the prior -395). Scored with a fixed, honest instrument
+(`score_anchor_fair.py`): the project's full strong detector (RandomizedSearchCV
+over 4 families) against a fair baseline (human pushed through the identical
+`to_canonical`→decode pipeline).
+
+**Evidence 1 — reconstruction was already exact in float32.**
+
+```
+reconstruction MSE  float32 = 5.99e-12   float64 = 9.65e-30
+```
+
+The clamps do **not** break invertibility: forward and inverse apply the same
+`log_s.clamp(-6,6)`, so it cancels algebraically, and float32 already round-trips
+to ~1e-12. There was no numerical error for float64 to fix. The RESEARCH
+hypothesis that the clamps "slightly break exact invertibility" was wrong.
+
+**Evidence 2 — float64 does not lower the floor** (same fixed strong detector):
+
+| sigma | float32 anchor (prior run) | float64 anchor (this run) | near-dup |
+|---|---|---|---|
+| 0.0 | 0.752 | **0.821** | 0.250 |
+| 0.05 | — | 0.863 | 0.021 |
+| 0.10 | 0.867 | 0.844 | 0.004 |
+| 0.15 | — | 0.844 | 0.001 |
+| 0.20 | — | 0.870 | 0.001 |
+
+float64 sigma=0 is **0.821**, statistically the same band as float32's 0.752 (the
+two are independent trainings). Nowhere near 0.5.
+
+**Evidence 3 — the "0.677 dent below the wall" was a weak-detector artifact.**
+The prior commit's 0.608/0.677 table used an uncommitted "strong-ish" detector.
+Under the project's canonical **full** strong detector — the same one that scores
+GMM 0.855 and the flow prior 0.86 — latent-anchored replay sits at **0.82–0.87
+across every sigma**, i.e. squarely on the ~0.85 wall, not below it. It never
+actually beat the wall.
+
+**Where the floor comes from — a joint fingerprint of the flow round-trip, not
+precision, not perturbation.** Honesty controls (`score_selfcontrol.py`) confirm
+the instrument is sound: two disjoint halves of real human strokes through the
+same pipeline score **0.501**, and reals sampled with-replacement + rotation
+(the anchor sigma=0 construction, but decoded *without the flow*) score **0.47**.
+Yet the *same* real strokes routed through the flow's encode→decode round-trip
+(anchor sigma=0) separate from reals at **0.82–0.83** — even though their marginal
+feature distributions are nearly identical (largest per-feature z-shift 0.043).
+So the tell is not marginal and not a perturbation effect: the flow round-trip
+imprints a tiny (~1e-6) but **structured, multi-feature** deviation that a tuned
+tree ensemble aggregates into ~0.82 over 4000 samples. It is present at zero
+perturbation and float64 does not touch it, because it is a property of the
+learned map, not of arithmetic precision.
+
+**Conclusion — the open thread is closed, negative.** Exact invertibility does
+not exist as a lever here (the map already round-trips to 1e-12) and would not
+help if it did: the sigma=0 floor is the flow's own reconstruction fingerprint,
+which a strong detector reads at ~0.82. Combined with Evidence 3, latent-anchored
+replay does **not** dent the wall under an honest strong detector — the earlier
+dent was detector weakness. **Genuine ~0.50 remains reachable only by replaying
+real strokes verbatim (0.506); every method that routes a real stroke through a
+learned generative map, even at zero perturbation, is fingerprinted back up to
+the ~0.85 band.** The wall stands, now including latent-anchored replay. The
+productive frontier is unchanged: the behavioral layers above the trajectory
+(reaction, evoked tracking, challenge-response), not a better path generator.
+
+*(Reproduce: `latent_anchor_invertible.py` trains + generates float64 anchors and
+saves `anchor_inv.ckpt`; `score_anchor_fair.py <anchor_file>...` scores against
+the fair baseline; `score_anchor_clampfair.py` rules out the input clamp;
+`score_selfcontrol.py` is the human-vs-human honesty control.)*
