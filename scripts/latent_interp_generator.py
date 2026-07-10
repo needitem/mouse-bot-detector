@@ -144,12 +144,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True, help="interp output; prior goes to <out>.prior")
-    ap.add_argument("--mode", choices=["prior", "interp", "both"], default="both")
+    ap.add_argument("--mode", choices=["prior", "interp", "both", "anchor"], default="both")
     ap.add_argument("--epochs", type=int, default=2000)
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--layers", type=int, default=16)
     ap.add_argument("--batch", type=int, default=512)
+    ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--n", type=int, default=4000)
+    ap.add_argument("--anchor_sigmas", default="0.1,0.2,0.35,0.5")
     ap.add_argument("--alpha_lo", type=float, default=0.3)
     ap.add_argument("--alpha_hi", type=float, default=0.7)
     args = ap.parse_args()
@@ -170,7 +172,7 @@ def main():
     flow = Flow(D, hidden=args.hidden, layers=args.layers).to(DEVICE)
     print(f"[latent] flow: {args.layers} layers, hidden {args.hidden}, "
           f"{sum(p.numel() for p in flow.parameters())/1e6:.2f}M params", flush=True)
-    opt = torch.optim.Adam(flow.parameters(), lr=1e-4)
+    opt = torch.optim.Adam(flow.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
     n = Xs.shape[0]; bs = args.batch
     for ep in range(args.epochs):
@@ -202,6 +204,21 @@ def main():
             z = torch.randn(args.n, D, device=DEVICE)
             _decode_write(flow.inverse(z).cpu().numpy(), std, mean, keep,
                           args.out + ".prior", rng, "prior")
+        if args.mode == "anchor":
+            # latent-anchored replay: encode a REAL stroke, add a small latent
+            # perturbation, decode. Unlike interp (between two reals -> drifts),
+            # this stays near ONE real anchor -> close to replay (0.5) while a
+            # small sigma still breaks near-duplicates. Sweep sigma to find the
+            # smallest that manufactures diversity without leaving the manifold.
+            Z = flow(Xs)[0]                       # (n, D) real encodings
+            zstd = Z.std(0, keepdim=True)         # per-dim latent scale
+            for sig in [float(s) for s in args.anchor_sigmas.split(",")]:
+                idx = rng.integers(0, n, args.n)
+                noise = torch.tensor(
+                    rng.standard_normal((args.n, D)).astype("float32"), device=DEVICE)
+                za = Z[idx] + sig * zstd * noise
+                _decode_write(flow.inverse(za).cpu().numpy(), std, mean, keep,
+                              f"{args.out}.s{sig}", rng, f"anchor(sig={sig})")
 
 
 if __name__ == "__main__":

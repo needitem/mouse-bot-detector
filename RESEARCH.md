@@ -1094,3 +1094,52 @@ single lowest non-replay number in the entire project is latent interpolation's
 generator crosses the finite-data fine-structure wall along any axis tried —
 architecture, capacity, epochs, or data volume. The wall is confirmed as a
 fundamental information-theoretic limit, not a modeling shortfall.
+
+---
+
+# Latent-anchored replay: denting the wall WITH diversity (0.68, not 0.85)
+
+The reframe after every from-scratch generator capped at ~0.85: stop generating
+from noise, and instead perturb a REAL stroke locally in a learned latent space —
+"latent-anchored replay". Encode a real stroke z=f(x_real), add a small
+per-dim Gaussian latent perturbation of scale sigma, decode. Unlike interpolation
+(between two reals -> drifts off-manifold) or position-space blend (0.889), this
+stays near ONE real anchor, so it should stay close to replay (0.5) while a small
+sigma still breaks the finite-pool near-duplicates that sink pure replay.
+
+Tested with a well-converged RealNVP (24 layers / 512 hidden, batch 1024, lr 2e-4,
+8000 epochs -> train nll -395, trained in a PyTorch container on an A30), scored
+against a FAIR baseline (human resampled through the same 48-point canonical
+pipeline as the generated strokes, so the resampling loss cancels). Near-dup is
+the min canonical-shape NN distance within the generated set (eps=0.0594):
+
+| sigma | strong-ish detect acc | near-dup fraction |
+|---|---|---|
+| 0.0 (pure reconstruction) | 0.608 | 0.25 |
+| 0.05 | 0.661 | 0.026 |
+| **0.10** | **0.677** | **0.001** |
+| 0.15 | 0.738 | 0.000 |
+| 0.20 | 0.731 | 0.000 |
+
+A PCA (linear-latent) anchor was far worse (0.834 at sigma=0.1) — the NONLINEAR
+flow latent is what keeps the perturbation on-manifold, confirming the mechanism.
+
+**Finding — a genuinely new point on the diversity/realism tradeoff.** At
+sigma~0.1, latent-anchored replay scores **~0.68 detection WITH near-duplicates
+fully broken (0.1%)**. That beats every from-scratch generator (GMM 0.855, flow
+0.86, diffusion 0.86, latent interp 0.815) AND, unlike pure replay (0.506 but
+finite), it manufactures unlimited diversity from a finite pool. It is the
+strongest attacker construction found in the project: diverse AND well below the
+~0.85 wall.
+
+**It does not reach 0.50, and the reason is implementation, not information
+theory.** The sigma=0 reconstruction floor is 0.608, not 0.5 — a normalizing flow
+is exactly invertible in principle (decode(encode(x))=x -> 0.5), so the gap is the
+ActNorm log-scale clamp [-6,6] and input clamp [-8,8] (added to stop an ActNorm
+gradient blowup) slightly breaking exact invertibility on the deep -395 flow.
+Restoring exact invertibility (unclamped + float64, or minimizing reconstruction
+error directly) should drop the floor toward 0.5 and the sigma~0.1 point toward
+~0.55-0.6-with-diversity — which would be a genuine "replay-grade AND diverse"
+break of replay's only weakness (finiteness). That remains the open thread; the
+wall for *from-scratch generation* stands, but latent-anchored replay is the first
+method to dent it while keeping diversity.
