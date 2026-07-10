@@ -118,12 +118,37 @@ class Flow(nn.Module):
         return z
 
 
+def _decode_write(Vk, std, mean, keep, path, rng, tag):
+    Vk = Vk * std + mean
+    V = np.zeros((Vk.shape[0], DIM), np.float32)   # reinsert dropped constant dims
+    V[:, keep] = Vk
+    V[:, N*2 - 2] = 1.0  # point_last x = 1; point0/point_last y stay 0
+    out = []
+    for v in V:
+        shape = v[:N*2].reshape(N, 2)
+        dist = math.exp(min(v[N*2], 12)); mt = max(math.exp(min(v[N*2+1], 8)), MIN_MT)
+        if not (np.isfinite(dist) and dist >= 5.0): continue
+        xs = shape[:, 0] * dist; ys = shape[:, 1] * dist
+        ang = rng.uniform(0, 2*math.pi); c, s = math.cos(ang), math.sin(ang)
+        rx = xs*c - ys*s; ry = xs*s + ys*c
+        t = np.linspace(0, mt, N)
+        pts = [[float(a_), float(b_), float(t_)] for a_, b_, t_ in zip(rx, ry, t)]
+        if all(np.isfinite([p for r in pts for p in r])): out.append(pts)
+    with open(path, "w") as f:
+        for pts in out:
+            f.write(json.dumps({"points": pts}) + "\n")
+    print(f"[latent:{tag}] wrote {len(out)} -> {path}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--mode", choices=["prior", "interp"], default="interp")
+    ap.add_argument("--out", required=True, help="interp output; prior goes to <out>.prior")
+    ap.add_argument("--mode", choices=["prior", "interp", "both"], default="both")
     ap.add_argument("--epochs", type=int, default=2000)
+    ap.add_argument("--hidden", type=int, default=256)
+    ap.add_argument("--layers", type=int, default=16)
+    ap.add_argument("--batch", type=int, default=512)
     ap.add_argument("--n", type=int, default=4000)
     ap.add_argument("--alpha_lo", type=float, default=0.3)
     ap.add_argument("--alpha_hi", type=float, default=0.7)
@@ -142,10 +167,12 @@ def main():
     Xs = torch.tensor((Xk - mean) / std, device=DEVICE).clamp(-8, 8)
     print(f"[latent] {Xs.shape[0]} vectors, modeled dim={D} (dropped {len(DROP)} constant)", flush=True)
 
-    flow = Flow(D).to(DEVICE)
+    flow = Flow(D, hidden=args.hidden, layers=args.layers).to(DEVICE)
+    print(f"[latent] flow: {args.layers} layers, hidden {args.hidden}, "
+          f"{sum(p.numel() for p in flow.parameters())/1e6:.2f}M params", flush=True)
     opt = torch.optim.Adam(flow.parameters(), lr=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
-    n = Xs.shape[0]; bs = 512
+    n = Xs.shape[0]; bs = args.batch
     for ep in range(args.epochs):
         perm = torch.randperm(n, device=DEVICE); tot = 0.0
         for j in range(0, n, bs):
@@ -163,39 +190,18 @@ def main():
     flow.eval()
     rng = np.random.default_rng(1)
     with torch.no_grad():
-        if args.mode == "prior":
-            z = torch.randn(args.n, D, device=DEVICE)
-            Vk = flow.inverse(z).cpu().numpy()
-        else:
-            # encode all real, interpolate random pairs in latent space
+        if args.mode in ("interp", "both"):
             Z = flow(Xs)[0]
             i1 = rng.integers(0, n, args.n); i2 = rng.integers(0, n, args.n)
             a = torch.tensor(rng.uniform(args.alpha_lo, args.alpha_hi, (args.n, 1)),
                              dtype=torch.float32, device=DEVICE)
             zi = a * Z[i1] + (1 - a) * Z[i2]
-            Vk = flow.inverse(zi).cpu().numpy()
-    Vk = Vk * std + mean
-    # reinsert the dropped constant dims -> full 98-dim vectors
-    V = np.zeros((Vk.shape[0], DIM), np.float32)
-    V[:, keep] = Vk
-    V[:, N*2 - 2] = 1.0  # point_last x = 1; point0 and point_last y stay 0
-
-    out = []
-    for v in V:
-        shape = v[:N*2].reshape(N, 2)
-        dist = math.exp(min(v[N*2], 12)); mt = max(math.exp(min(v[N*2+1], 8)), MIN_MT)
-        if not (np.isfinite(dist) and dist >= 5.0): continue
-        xs = shape[:, 0] * dist; ys = shape[:, 1] * dist
-        ang = rng.uniform(0, 2*math.pi); c, s = math.cos(ang), math.sin(ang)
-        rx = xs*c - ys*s; ry = xs*s + ys*c
-        t = np.linspace(0, mt, N)
-        pts = [[float(a_), float(b_), float(t_)] for a_, b_, t_ in zip(rx, ry, t)]
-        if all(np.isfinite([p for r in pts for p in r])): out.append(pts)
-
-    with open(args.out, "w") as f:
-        for pts in out:
-            f.write(json.dumps({"points": pts}) + "\n")
-    print(f"[latent:{args.mode}] wrote {len(out)} -> {args.out}", flush=True)
+            _decode_write(flow.inverse(zi).cpu().numpy(), std, mean, keep,
+                          args.out, rng, "interp")
+        if args.mode in ("prior", "both"):
+            z = torch.randn(args.n, D, device=DEVICE)
+            _decode_write(flow.inverse(z).cpu().numpy(), std, mean, keep,
+                          args.out + ".prior", rng, "prior")
 
 
 if __name__ == "__main__":

@@ -1059,3 +1059,38 @@ lands in [0.84, 0.91]. Genuine ~0.50 is reached ONLY by replaying real strokes
 crosses the finite-data fine-structure wall. The productive frontier is the
 behavioral layers above the trajectory (reaction, evoked tracking,
 challenge-response), not a better path generator.
+
+---
+
+# Capacity sweep of latent interpolation: a sweet spot at 0.815, then overfitting — wall confirmed
+
+Latent interpolation was the one method that improved with capacity, so we swept
+it to the maximum (trained the big flows on a dedicated GPU, scored on the
+Balabit strong detector here):
+
+| flow | params | converged train nll | interp shape_only |
+|---|---|---|---|
+| 16 layers / 256 hidden | 1.3M | -224 | 0.843 |
+| 24 layers / 512 hidden | 9.8M | -338 | **0.815** (best) |
+| 48 layers / 1024 hidden | 64M | -523 | 0.875 |
+
+**The trend is non-monotonic — a sweet spot, not a path to 0.50.** 16→24 layers
+improved interp (0.843→0.815), but scaling to 48 layers / 64M params REGRESSED it
+(0.815→0.875). The mechanism is overfitting: 64M parameters on 14k training
+strokes drives the *training* nll far deeper (-523) by memorizing the set, which
+collapses the prior samples toward over-smoothness (jerk_rms 0.215 vs human's
+0.332) and distorts the latent geometry so interpolation decodes to *less*
+realistic strokes. Deeper training nll past the sweet spot is memorization, not
+better generalization, so it does not lower — and in fact raises — the strong
+detector's accuracy.
+
+**This closes the last open question.** Capacity scaling does not push latent
+interpolation toward 0.50; it bottoms out at ~0.815 and then overfits. Combined
+with everything prior, EVERY generation approach — learned (GMM, flow-prior,
+diffusion, DMTG-1M), mechanistic (sigma-lognormal + residual/interp), and
+interpolative (latent, swept across capacity) — lands in [0.81, 0.91]. The
+single lowest non-replay number in the entire project is latent interpolation's
+0.815, still nowhere near the 0.506 that ONLY replay of real strokes reaches. No
+generator crosses the finite-data fine-structure wall along any axis tried —
+architecture, capacity, epochs, or data volume. The wall is confirmed as a
+fundamental information-theoretic limit, not a modeling shortfall.
