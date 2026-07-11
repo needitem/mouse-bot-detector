@@ -1224,3 +1224,72 @@ productive frontier is unchanged: the behavioral layers above the trajectory
 saves `anchor_inv.ckpt`; `score_anchor_fair.py <anchor_file>...` scores against
 the fair baseline; `score_anchor_clampfair.py` rules out the input clamp;
 `score_selfcontrol.py` is the human-vs-human honesty control.)*
+
+---
+
+# ~0.57 WITH near-duplicates broken: the perturbation's FREQUENCY is the lever
+
+The negative result above said the flow can't give on-manifold diversity. But the
+target was never "generate from noise" — it is "break a finite pool's
+near-duplicates as cheaply as possible." Chasing that directly found a real
+sub-0.6 point, and the reason is a lever nobody had turned: the **frequency
+content** of the per-flick perturbation.
+
+**Step 1 — cancel the flow fingerprint (displacement replay).** Emitting
+`decode(z)` costs 0.82 even at zero perturbation (the round-trip fingerprint).
+Emit instead the CLEAN real plus only the flow's displacement,
+`x + (decode(z+noise) - decode(z))` (`latent_displace_generator.py`, loads the
+saved checkpoint, no retraining). At sigma=0 this is exactly `x` → **0.496**: the
+fingerprint cancels perfectly. But the flow's displacement is off-manifold at ANY
+scale — sigma=0.02 (near-dup 0.10) already jumps to **0.877** — because the flow
+prior itself is only 0.86. A `x + local-PCA-tangent` perturbation from the human
+data's own geometry (`local_tangent_generator.py`) is no better: 0.80–0.84 once
+diversity is real. So neither a learned map nor the data's linear tangent supplies
+cheap on-manifold diversity.
+
+**Step 2 — the insight: the tell is high-FREQUENCY, not macro-shape novelty.**
+Every failed perturbation above injects broadband/high-frequency content (jerk,
+tremor) — the strong detector's most-relied-on features. What if the perturbation
+that breaks near-duplicates is confined to LOW frequency? It changes the macro
+shape (so a repeat no longer matches) while leaving the human jerk spectrum
+intact. `minimal_replay_generator.py` compares, on the honest raw-vs-raw baseline
+(`score_raw.py`, which reproduces `detect_replay_dilemma.py`'s 6px→0.64 and a
+verbatim control of 0.53):
+
+| perturbation (near-dup broken to ~0.01–0.02) | strong-detector acc |
+|---|---|
+| per-point WHITE jitter, 6 px | 0.632 |
+| smooth warp, 3 half-sine modes, 6 px | 0.582 |
+| smooth warp, **2 modes**, 8–10 px | **0.576 – 0.596** |
+| smooth warp, **1 mode**, 18–22 px | **0.571 – 0.582** |
+| verbatim replay (floor, near-dup 0.25) | 0.534 |
+
+**Lower frequency wins monotonically** (modes 1 < 2 < 3 < white at equal
+diversity), confirming the mechanism: a smooth low-frequency warp breaks the pool
+via macro shape and pays almost nothing in the high-frequency features that carry
+the bot tell. The best near-dup-broken point is **~0.57**, versus 0.64 for white
+jitter and 0.85+ for everything off-manifold. The price of breaking a finite
+pool's near-duplicates down to ~1% is only **+0.04 over verbatim** (0.53 → 0.57),
+not the +0.11 (white jitter) or +0.32 (blends/flow) found before.
+
+**What this refines.** The diversity↔on-manifold tradeoff is real and still holds
+— you cannot break near-duplicates for free. But its **exchange rate is set by the
+perturbation's frequency**, and at the low-frequency limit the rate is nearly
+flat: ~0.57 detection buys a fully diversified finite pool. This is a genuine
+sub-0.6 trajectory-layer attack, and the cheapest diversity found in the project.
+Method for `needaimbot`: replay a distance-matched human stroke and add a 1–2-mode
+smooth warp (~10–20 px, endpoints anchored) per flick — CPU-only, no model.
+
+**Caveats, honestly.** (1) This is minimal-perturbation *replay*, not generation;
+the ~0.85 *generation* wall is untouched. (2) It clears layer-1 (single-move
+trajectory) + the near-duplicate check; the long-horizon / style-consistency /
+cross-account detectors (layers above) still aggregate over a session, and a
+pre-recorded stroke still cannot *react* to a moving target (challenge-response).
+(3) 0.57 is above the 0.506 of pure verbatim replay — the finiteness escape still
+costs something, just far less than previously measured.
+
+*(Reproduce: `minimal_replay_generator.py --mode warp --modes 2 --scales ...`
+generates; `score_raw.py <file>...` scores against the matched raw baseline;
+`latent_displace_generator.py` + `score_anchor_fair.py` for the fingerprint-cancel
+and flow-displacement cliff; `local_tangent_generator.py` for the data-tangent
+comparison.)*
