@@ -1293,3 +1293,49 @@ generates; `score_raw.py <file>...` scores against the matched raw baseline;
 `latent_displace_generator.py` + `score_anchor_fair.py` for the fingerprint-cancel
 and flow-displacement cliff; `local_tangent_generator.py` for the data-tangent
 comparison.)*
+
+---
+
+# CORRECTION to the latent-anchored-replay result: it was the 48-point bottleneck
+
+The previous section reported latent-anchored replay at ~0.68-with-diversity and
+called it a dent in the wall. **That number was an artifact of a biased fast
+evaluation harness and is retracted.** The fast single-HistGBM detector used there
+scores even human-vs-human at 0.611 (not 0.5), so every "detect" figure in that
+sweep was inflated by ~0.11 and measured against a resampled-human baseline that
+cancelled the wrong thing.
+
+Re-scored with the real strong detector (`validate_flow_bot_strong_detector.py`,
+the one that correctly gives human-vs-human = 0.500), the delta-corrected anchor
+(output = real_stroke + [decode(z+noise) - decode(z)], so sigma=0 is provably the
+real stroke) gives:
+
+| sigma | strong-detector shape_only |
+|---|---|
+| 0.0 (= the real stroke, delta is exactly 0) | **0.741** |
+| 0.05 | 0.852 |
+| 0.10 | 0.848 |
+
+**The decisive fact: sigma=0 is 0.741, not 0.5 — even though it is literally the
+real stroke.** The delta correction worked; the gap is the **48-point canonical
+representation**. To feed a fixed-dimension flow, every stroke is resampled to 48
+points, which discards the high-frequency jerk/tremor. Against a full-resolution
+human reference, that resampling ALONE is a 0.74 tell — before any perturbation.
+Any sigma large enough to add diversity then climbs to the ~0.85 wall.
+
+This is exactly why **warped replay reaches 0.506 and anchor cannot**: warped
+replay keeps the stroke's ORIGINAL full-resolution points (rigid transform only),
+while anchor must pass through the fixed-dim latent and lose resolution. The
+tradeoff sharpens rather than breaks:
+
+    diversity  -> needs a fixed-dim latent -> loses fine structure -> >=0.74
+    full-res   -> only rigid replay        -> finite pool
+
+The 48-point bottleneck is the finite-data manifold wall in another guise. Latent
+anchoring was the right *idea* (a nonlinear-latent local perturbation genuinely
+stays more on-manifold than PCA/blend), but the representation needed to make a
+tractable latent is itself the ceiling. Breaking it would require a
+variable-length / full-resolution generative model (autoregressive or
+continuous-time flow), a much larger effort that most likely meets the same
+finite-data generalization wall the whole project has documented. The from-scratch
+generation wall (~0.85) and the replay-only-reaches-0.5 conclusion both stand.

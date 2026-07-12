@@ -205,19 +205,24 @@ def main():
             _decode_write(flow.inverse(z).cpu().numpy(), std, mean, keep,
                           args.out + ".prior", rng, "prior")
         if args.mode == "anchor":
-            # latent-anchored replay: encode a REAL stroke, add a small latent
-            # perturbation, decode. Unlike interp (between two reals -> drifts),
-            # this stays near ONE real anchor -> close to replay (0.5) while a
-            # small sigma still breaks near-duplicates. Sweep sigma to find the
-            # smallest that manufactures diversity without leaving the manifold.
+            # latent-anchored replay, residual-corrected (delta form):
+            #   output = REAL_stroke + [decode(z_real + sigma*noise) - decode(z_real)]
+            # At sigma=0 the delta is 0 -> output == the real stroke EXACTLY, so the
+            # reconstruction floor is a guaranteed 0.5 regardless of the flow's
+            # numerical invertibility (the clamps no longer matter). For sigma>0 it
+            # is the real stroke plus the flow's on-manifold perturbation direction,
+            # isolating the pure anchor effect.
             Z = flow(Xs)[0]                       # (n, D) real encodings
-            zstd = Z.std(0, keepdim=True)         # per-dim latent scale
+            base = flow.inverse(Z)                # decode(z_real), std space
+            zstd = Z.std(0, keepdim=True)
             for sig in [float(s) for s in args.anchor_sigmas.split(",")]:
                 idx = rng.integers(0, n, args.n)
                 noise = torch.tensor(
                     rng.standard_normal((args.n, D)).astype("float32"), device=DEVICE)
                 za = Z[idx] + sig * zstd * noise
-                _decode_write(flow.inverse(za).cpu().numpy(), std, mean, keep,
+                delta = flow.inverse(za) - base[idx]      # on-manifold displacement
+                out_std = (Xs[idx] + delta).cpu().numpy() # REAL + delta (exact at sig=0)
+                _decode_write(out_std, std, mean, keep,
                               f"{args.out}.s{sig}", rng, f"anchor(sig={sig})")
 
 
