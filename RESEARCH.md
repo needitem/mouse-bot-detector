@@ -1411,3 +1411,49 @@ is itself detectable; only warped replay, which keeps the exact raw points and
 applies a rigid transform, reaches 0.506. The latent-anchor family is closed: it
 beats from-scratch generation in concept but cannot deliver a diverse attack below
 ~0.78 on this data.
+
+---
+
+# BREAKTHROUGH: elastic warped replay — ~0.60 detection WITH diversity
+
+Every re-representation (from-scratch generation, latent-anchor) was walled
+because turning a stroke into a fixed-dim/resampled representation is itself a
+tell. The fix: **do not re-represent — deform the real stroke's ORIGINAL points.**
+
+`elastic_replay.py`: take a real stroke's native points (native resolution and
+irregular timing - exactly what lets warped replay reach 0.506), apply a rigid
+rotation, then a SMOOTH low-frequency lateral deformation (a few sine modes of
+perpendicular displacement, amplitude a fraction of the stroke size, zero at the
+endpoints so the target is preserved). The smooth bend changes the canonical
+shape - breaking finite-pool near-duplicates - while preserving the fine local
+kinematics, so detection stays near replay instead of climbing to the generation
+wall. All compute run remotely (worker2 container); scored by the same strong
+detector.
+
+| deformation amp | strong-detector shape_only | all | near-dup fraction |
+|---|---|---|---|
+| 0.00 (pure warped replay) | 0.531 | 0.575 | 0.248 (repeats) |
+| 0.025 | 0.574 | 0.599 | 0.014 |
+| **0.030** | **0.598** | 0.623 | **0.012** |
+| 0.035 | 0.605 | 0.627 | 0.007 |
+| 0.05 | 0.659 | 0.662 | 0.003 |
+| 0.10 | 0.750 | 0.761 | 0.001 |
+
+**At amp~0.03, detection is ~0.60 with near-duplicates broken (1.2%)** - a genuine
+diverse construction well below the ~0.85 generation wall, and unlike pure replay
+(0.51 but finite) it manufactures unlimited diversity from a finite pool. `all`
+stays ~0.62 too (generators are 1.000), because keeping the raw points leaves no
+absolute-geometry tell either.
+
+**Why it beats latent-anchor (0.78):** anchor had to canonicalize/resample for the
+fixed-dim flow, a ~0.16 tell by itself. Elastic replay keeps the exact native
+points and only bends them smoothly, so amp=0 reproduces replay's ~0.5 and small
+amp adds shape diversity at low kinematic cost. This is the first construction to
+hold BOTH low single-move detection AND broken near-duplicates - the combination
+the finite-data argument said generation couldn't have. It does so not by
+generating on-manifold from noise (impossible at ~0.85) but by staying ON a real
+stroke and perturbing along a smooth, low-frequency (kinematically cheap)
+direction. Remaining defender move to test: session-level distribution /
+source-clustering (the detector that caught earlier canonical-space manifold
+perturbation) - whether the smooth raw-space deformation also defeats that is the
+next question.
