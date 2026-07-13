@@ -1457,3 +1457,29 @@ direction. Remaining defender move to test: session-level distribution /
 source-clustering (the detector that caught earlier canonical-space manifold
 perturbation) - whether the smooth raw-space deformation also defeats that is the
 next question.
+
+---
+
+# Applied to needaimbot: elastic deformation in warped_replay.hpp
+
+The elastic-replay finding was ported into the live aimbot's flick generator
+(`needaimbot/mouse/warped_replay.hpp`, new `elastic_amp`/`elastic_modes` config).
+A faithful Python port of the C++ generate() (`needaimbot_flick_test.py`) was run
+against the actual `flick_trajectories.json` DB and scored on worker2:
+
+- **Finite-pool fix (the point):** over a long session, N=20,000 flicks from a
+  6,000-stroke pool (3.3x reuse), pure replay is **99.6% near-duplicate** (pool
+  exhausts -> repeats -> caught by long-horizon/near-dup detection). Elastic
+  (amp=0.03) drops that to **9.2%** - the finite pool becomes effectively
+  unlimited, so no-repeat never has to reuse.
+- **Single-move:** elastic also lowers strong-detector accuracy 0.774 -> 0.718.
+- **A separate finding:** needaimbot's pure-replay flick scores **0.774**, not the
+  0.506 of full-resolution warped replay - because it resamples every stroke to a
+  48-point unit-canonical shape (upsampling native ~11-point strokes), and that
+  re-representation is itself ~0.24 of tell. A native-resolution stroke DB (keep
+  the raw points instead of 48-pt canonical) is the larger remaining improvement;
+  elastic is orthogonal and stacks with it.
+
+position_jitter (white per-point noise) is set to 0 in the config in favor of
+elastic - white jitter adds high-frequency jerk, the exact tell that walls
+synthetic generators at ~0.85.
