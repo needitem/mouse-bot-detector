@@ -1614,3 +1614,42 @@ suggested. Corrected conclusion: needaimbot's flick sits at ~0.52 vs a general
 all-motion detector and ~0.60 vs a fair aim-flick-specific detector - close to
 the human floor in both, with unlimited non-repeating diversity from elastic. The
 remaining small gap is the inherent scale-warp-to-arbitrary-reach cost.
+
+---
+
+# Defender upgrade: residual-spectrum detector catches elastic replay
+
+elastic warped replay beats the single-move detector (~0.60) by keeping a real
+stroke's fine kinematics and adding only a smooth low-frequency perpendicular
+bend. That bend is exactly its weakness: relative to the nearest REAL stroke, an
+elastic flick differs by a smooth, mostly-perpendicular, low-frequency residual,
+whereas a real flick differs by high-frequency jerk/tremor. `detector_upgrade.py`
+adds per-flick residual-spectrum features (low- vs high-frequency energy of the
+residual to the nearest real-DB neighbor, perpendicular fraction) - robust to the
+deformation basis, not matched to the exact sine modes.
+
+| detector vs elastic (amp 0.03) | accuracy |
+|---|---|
+| baseline shape_only | 0.639 |
+| + residual-spectrum, detector DB DISJOINT from attacker pool (private) | 0.682 |
+| + residual-spectrum, detector DB = attacker's pool sources (public/known data) | **0.995** |
+| (residual features are inert vs PURE replay - there is no bend) | - |
+
+**The residual signature is decisive when the attacker's stroke pool is known.**
+If the attacker builds the replay pool from public human data (Balabit, etc.), an
+anti-cheat holding the same data finds each elastic flick's exact source as the
+nearest neighbor, and the residual is the clean bend - no real stroke has that -
+giving 0.995. This forces the attacker onto a PRIVATE pool. Even then the residual
+detector beats the baseline (0.68 vs 0.64) with a disjoint DB, and the signal
+strengthens as the detector's human DB grows (nearest neighbor approaches the
+source). So elastic replay is not free: it is caught outright on public data and
+pressured on private data.
+
+**Arms-race position after this round:** attacker's best is elastic warped replay
+on a large PRIVATE single-person pool with account rotation (single-move ~0.52-
+0.60, near-dup broken); defender's counters are (a) residual-spectrum matching
+(catches any pool it shares/covers), (b) session-distribution clustering (catches
+the finite pool at N>=200-500), (c) challenge-response at the signal level. The
+finite-data wall stands: the attacker cannot be both unlimited-diverse and
+perfectly on-manifold, so aggregate observation plus a broad human DB keeps the
+defender ahead - at the cost, as always, of needing to observe/hold enough.
