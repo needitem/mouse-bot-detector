@@ -1483,3 +1483,44 @@ against the actual `flick_trajectories.json` DB and scored on worker2:
 position_jitter (white per-point noise) is set to 0 in the config in favor of
 elastic - white jitter adds high-frequency jerk, the exact tell that walls
 synthetic generators at ~0.85.
+
+---
+
+# Session-distribution gate: elastic replay is caught too (finite-pool wall holds)
+
+Elastic replay clears the single-move (~0.60) and min-distance near-duplicate
+detectors. The last arms-race gate is the session-distribution detector
+(`detect_replay_cluster.py`), which featurizes a session by its within-session
+nearest-neighbor DISTANCE DISTRIBUTION - it caught the old canonical-space
+humanvar perturbation because a finite pool of K sources makes flicks cluster
+around those sources. Does the raw-space smooth bend spread samples enough to
+pass? (`detect_session_elastic.py`, run on worker2; humanvar is the positive
+control that confirms the detector works.)
+
+| session length N | elastic detect acc | humanvar detect acc (control) |
+|---|---|---|
+| 50 | 0.525 | 0.588 |
+| 100 | 0.600 | 0.575 |
+| 200 | 0.817 | 0.804 |
+| 500 | 0.979 | 0.992 |
+| 1000 | 1.000 | 1.000 |
+
+**Elastic is caught at essentially the same rate as the old attack.** Short
+sessions (N<=100) evade (~0.5-0.6), but by N>=200 the detector reaches ~0.8 and by
+N>=500 it is ~1.0. The reason is structural: however you perturb, every flick is
+still (one of K sources) + (an independent perturbation), so flicks cluster around
+the K sources, and over a long enough session the nearest-neighbor distance
+distribution reveals that clustering - a real player's strokes are all
+independent. The smooth bend breaks the MINIMUM-distance near-duplicate but not
+the DISTRIBUTION-level cluster trace.
+
+**This is the same finite-pool wall, one gate up.** Elastic replay is the
+strongest attacker construction found - it beats every generator on single-move
+(~0.60 with diversity) and defeats min-distance near-dup - but aggregate
+observation (session distribution / long-horizon) still catches the finite pool.
+The arms-race conclusion stands unchanged: the defender who AGGREGATES wins; the
+attacker wins only in short sessions. The practical answer for a live aimbot is
+unchanged too - a large private single-person pool (big K), per-account usage
+caps, and account rotation to stay under a real anti-cheat's aggregation horizon.
+Elastic raises the attacker's short-session quality (0.60-with-diversity vs
+0.77-canonical-replay) but does not overturn the aggregate result.
