@@ -1591,3 +1591,26 @@ against the tight aim distribution - only replaying at the stroke's ORIGINAL rea
 gives 0.50, which forfeits arbitrary targeting (i.e. pure finite replay). Shipped
 fix: unbiased shuffled DB + 256-point cap, which improves both regimes (general
 0.77->0.52, aim-specific 0.70->0.68) and stacks with elastic's diversity.
+
+---
+
+# Correction: the "fair" aim-flick reference had the SAME session-order bias
+
+The fair-reference numbers above (aim-flick floor 0.509, needaimbot 0.675) were
+themselves biased: fair_validate.py's aim_flicks() took the first 8000 passing
+strokes in file order - session-clustered, the exact bias just fixed in the
+export. Shuffling the reference too (random draw across the full human
+distribution) gives the honest fair comparison:
+
+| aim-context (unbiased reference) | biased (wrong) | fixed |
+|---|---|---|
+| FLOOR: aim-flick vs aim-flick | 0.509 | 0.533 |
+| needaimbot aim-elastic vs human aim-flicks | 0.675 | **0.604** |
+
+The biased reference (narrow, session-clustered) made needaimbot look more
+separable. Against a fair aim-flick reference, needaimbot's flick is **0.604**,
+only ~0.07 above the 0.533 human aim-flick floor - not the ~0.68 the biased test
+suggested. Corrected conclusion: needaimbot's flick sits at ~0.52 vs a general
+all-motion detector and ~0.60 vs a fair aim-flick-specific detector - close to
+the human floor in both, with unlimited non-repeating diversity from elastic. The
+remaining small gap is the inherent scale-warp-to-arbitrary-reach cost.

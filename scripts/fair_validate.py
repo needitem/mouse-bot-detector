@@ -19,8 +19,15 @@ import pandas as pd
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
 
 def aim_flicks(path, eff=0.75, lat=0.15, dmin=30, dmax=2000, tmin=120, tmax=1600, cap=8000):
+    # Shuffle before capping: the raw file is session-ordered, so taking the
+    # first `cap` passing strokes would build a session-clustered (biased)
+    # reference - the same bias fixed in export_flick_db.py. A shuffled draw
+    # gives a fair aim-flick reference spanning the full human distribution.
+    import random
+    lines = open(path).readlines()
+    random.Random(0).shuffle(lines)
     out = []
-    for l in open(path):
+    for l in lines:
         p = np.asarray(json.loads(l)["points"], float)
         if len(p) < 5: continue
         x, y, t = p[:,0]-p[0,0], p[:,1]-p[0,1], p[:,2]-p[0,2]
