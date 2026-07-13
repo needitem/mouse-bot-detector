@@ -1653,3 +1653,38 @@ the finite pool at N>=200-500), (c) challenge-response at the signal level. The
 finite-data wall stands: the attacker cannot be both unlimited-diverse and
 perfectly on-manifold, so aggregate observation plus a broad human DB keeps the
 defender ahead - at the cost, as always, of needing to observe/hold enough.
+
+---
+
+# Attacker counter to the residual detector, and the squeeze
+
+Can the attacker beat the residual-spectrum detector? Yes - specifically - by
+replacing the synthetic sinusoid bend with a perturbation TOWARD another real
+stroke, mag*(shape_A - shape_B) (`variability_replay.py`). The residual to the
+nearest real neighbor then carries the NATURAL human-variation spectrum instead
+of a low-frequency artifact:
+
+| detector vs attack | elastic (sinusoid bend) | variability (real-direction) |
+|---|---|---|
+| residual-only, disjoint DB | 0.657 | **0.577** (near chance - evades) |
+| residual+shape, overlapping DB | 0.995 | **0.895** |
+| session-distribution (N=200) | 0.82 | 0.80 (still caught) |
+
+**The two perturbation families have complementary weaknesses, so the attacker
+cannot escape both at once.** elastic's synthetic bend is caught by the
+residual-spectrum detector; variability's real-direction perturbation evades that
+(natural residual spectrum) but clusters at least as hard, so the
+session-distribution detector still catches it (~0.80 at N=200, same as elastic).
+Switching perturbation to beat one detector hands the win to the other.
+
+**Bottom line of the whole arms race, restated once more.** The attacker's only
+durable escape remains operational, not cryptographic: a large PRIVATE
+single-person pool (weakens residual matching), per-account flick counts kept
+below the session-distribution horizon, and account rotation. Every attempt to
+manufacture unlimited diversity from a finite pool leaves a trace in SOME
+aggregate - residual spectrum, session distribution, or long-horizon reuse -
+because "unlimited diverse AND perfectly on-manifold" is impossible on finite
+data. A defender who holds a broad human DB and observes enough stays ahead; the
+contest is economic (make detection cost more than the cheat is worth), which is
+where challenge-response - defeating replay at the signal level rather than the
+statistics level - remains the decisive production answer.
