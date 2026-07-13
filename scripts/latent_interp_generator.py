@@ -152,11 +152,14 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--n", type=int, default=4000)
     ap.add_argument("--anchor_sigmas", default="0.1,0.2,0.35,0.5")
+    ap.add_argument("--npts", type=int, default=48)
     ap.add_argument("--alpha_lo", type=float, default=0.3)
     ap.add_argument("--alpha_hi", type=float, default=0.7)
     args = ap.parse_args()
+    global N, DIM
+    N = args.npts; DIM = N*2 + 2
 
-    print(f"[latent] device={DEVICE}", flush=True)
+    print(f"[latent] device={DEVICE}, npts={N}, dim={DIM}", flush=True)
     X = load_vectors(args.data)
     # Drop the dims pinned constant by canonicalization: point0=(0,0) -> dims 0,1
     # and point_last=(1,0) -> dims N*2-2, N*2-1. Modeling std-0 dims wrecks

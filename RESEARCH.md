@@ -1375,3 +1375,39 @@ floor from ~0.74 toward ~0.62 — a real improvement over the ~0.85 generation w
 and it keeps diversity — but it cannot reach replay's 0.50. The finite-data wall
 holds; it just shows up as a re-representation floor once resolution is removed as
 a confound.
+
+---
+
+# High-resolution (192pt) flow-anchor: 0.6-with-diversity is NOT reachable
+
+The resolution diagnostic suggested a raw resample-of-real at 192 points floors at
+~0.62, so a 192-point flow-anchor was built to try for a ~0.62 diverse attack
+(delta-corrected, 386-dim / 35M-param RealNVP, train nll -2181 on an A30).
+
+| 192pt anchor sigma | strong-detector shape_only | near-dup fraction |
+|---|---|---|
+| 0.0 (= real stroke) | 0.778 | 0.25 (no diversity) |
+| 0.03 | 0.867 | 0.052 |
+| 0.05 | 0.855 | 0.016 |
+| 0.08 | 0.861 | 0.004 |
+| (raw resampled-real 192pt, reference) | **0.616** | - |
+
+**It does not reach 0.6.** The sigma=0 floor is 0.778, not the 0.616 the raw
+resample achieves — a 0.16 gap. That gap is the **canonical representation the flow
+requires**: normalizing each stroke to a unit-distance, uniform-time,
++x-aligned canonical shape (and reconstructing distance from a log-scalar) is
+itself a ~0.16 tell versus keeping the stroke's raw coordinates/timing, even for a
+literal real stroke. On top of that, any sigma large enough to break near-dup
+(>=0.03) jumps to the ~0.86 generation wall. There is no sigma with both low
+detection and broken near-dup.
+
+**Two tells compound and neither clears 0.6:** the fixed-dim canonical
+representation (floor 0.78) plus diversity-needs-sigma (-> 0.86). The 0.62 the
+resolution diagnostic showed exists only when the stroke's RAW coordinates are
+kept — which a fixed-dim flow cannot use (it needs the canonical normalization,
+and that costs the 0.16). This is the same lesson one level deeper: any
+re-representation the generator needs (canonicalization here, resampling before)
+is itself detectable; only warped replay, which keeps the exact raw points and
+applies a rigid transform, reaches 0.506. The latent-anchor family is closed: it
+beats from-scratch generation in concept but cannot deliver a diverse attack below
+~0.78 on this data.
