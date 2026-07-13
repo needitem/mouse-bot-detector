@@ -1524,3 +1524,31 @@ unchanged too - a large private single-person pool (big K), per-account usage
 caps, and account rotation to stay under a real anti-cheat's aggregation horizon.
 Elastic raises the attacker's short-session quality (0.60-with-diversity vs
 0.77-canonical-replay) but does not overturn the aggregate result.
+
+---
+
+# needaimbot to ~0.66: native-resolution DB (the 48-pt resampling was ~0.05-0.10 of tell)
+
+needaimbot's warped_replay stored strokes as 48-point unit-canonical shapes;
+its flick scored 0.774 (pure replay) / 0.718 (elastic) - well above the 0.531 /
+0.598 of full-resolution offline elastic replay. The gap is re-representation:
+native flicks are ~11 points, and resampling up to 48 by index (linear interp)
+changes the fine kinematics. Switched the DB + Stroke to NATIVE resolution
+(variable point count, no resample). Measured on worker2:
+
+| needaimbot flick | strong-detector shape_only |
+|---|---|
+| 48-pt canonical, pure replay | 0.774 |
+| 48-pt canonical, elastic | 0.718 |
+| native, elastic (relaxed filter) | ~0.66 |
+| offline elastic_replay.py (orig distance, full pool) | 0.577 |
+
+Native resolution + elastic reaches ~0.66. The residual ~0.08 above the 0.58
+offline floor is the aimbot pipeline, isolated by sweeps: it is NOT the
+straightness filter (eff 0.9->0.0 moved only 0.71->0.67) and NOT the distance
+scaling (tol 0.15->0.02 moved only 0.674->0.661). It is the aim-flick distance/
+duration distribution (30-2000px, 120-1600ms) differing from the all-movement
+human reference - partly a comparison artifact (a real anti-cheat compares
+aim-context motion to aim-context motion), partly the inherent cost of warping a
+recorded stroke onto an arbitrary target reach. Net: needaimbot's flick went from
+a ~0.85-band-adjacent 0.77 to ~0.66 with unlimited non-repeating diversity.

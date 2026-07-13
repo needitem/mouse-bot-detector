@@ -21,6 +21,7 @@ Output: flick_trajectories.json  { "unit":"px", "n_pts":48, "traj":[ {"d":dist,
 """
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -28,25 +29,25 @@ import numpy as np
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA = SCRIPT_DIR.parent / "data" / "processed" / "human_movements.jsonl"
-OUT = SCRIPT_DIR.parent / "flick_trajectories.json"
+OUT = SCRIPT_DIR.parent / os.environ.get("OUTNAME","flick_trajectories.json")
 
-N_PTS          = 48
-MIN_EFFICIENCY = 0.90
-MAX_LATERAL    = 0.10
+MAX_PTS        = 64      # cap for the C++ fixed array; native strokes are ~11-40 pts
+MIN_EFFICIENCY = float(os.environ.get("EFF","0.75"))
+MAX_LATERAL    = float(os.environ.get("LAT","0.15"))
 MIN_DIST       = 30.0
 MIN_DUR, MAX_DUR = 120.0, 1600.0
 MAX_KEEP       = 6000
 
 
-def canonical48(pts):
+def canonical_native(pts):
+    """Keep the stroke's NATIVE points (no resampling - resampling to a fixed
+    grid changes the fine kinematics and is itself a ~0.2 detector tell). Only
+    rotate the endpoint onto +x and scale to unit distance so it can be warped
+    onto any target; the native point count and irregular timing are preserved."""
     p = np.asarray(pts, dtype=float)
-    if len(p) < 5:
+    if len(p) < 5 or len(p) > MAX_PTS:
         return None
-    N = len(p)
-    xi = np.linspace(0, N - 1, N_PTS)              # resample by point index (keeps irregular timing)
-    ar = np.arange(N)
-    x = np.interp(xi, ar, p[:, 0]);  y = np.interp(xi, ar, p[:, 1]);  t = np.interp(xi, ar, p[:, 2])
-    x, y, t = x - x[0], y - y[0], t - t[0]
+    x, y, t = p[:, 0] - p[0, 0], p[:, 1] - p[0, 1], p[:, 2] - p[0, 2]
     dx, dy = x[-1], y[-1]
     dist = math.hypot(dx, dy)
     dur = float(t[-1])
@@ -73,16 +74,18 @@ def main():
     with open(DATA) as f:
         for line in f:
             n_read += 1
-            rec = canonical48(json.loads(line)["points"])
+            rec = canonical_native(json.loads(line)["points"])
             if rec is not None:
                 kept.append(rec)
             if len(kept) >= MAX_KEEP:
                 break
     kept.sort(key=lambda r: r["d"])
-    OUT.write_text(json.dumps({"unit": "px", "n_pts": N_PTS, "traj": kept}))
+    OUT.write_text(json.dumps({"unit": "px", "n_pts": 0, "traj": kept}))  # n_pts=0 -> variable
     ds = [r["d"] for r in kept]
-    print(f"[export] read {n_read}, kept {len(kept)} straight 48-pt strokes "
-          f"(eff>={MIN_EFFICIENCY}, lateral<={MAX_LATERAL})")
+    npts = [len(r["s"]) for r in kept]
+    print(f"[export] read {n_read}, kept {len(kept)} straight native strokes "
+          f"(eff>={MIN_EFFICIENCY}, lateral<={MAX_LATERAL}); "
+          f"points/stroke median {sorted(npts)[len(npts)//2]}, max {max(npts)}")
     if ds:
         print(f"[export] distance range {min(ds):.0f}-{max(ds):.0f}px, median {sorted(ds)[len(ds)//2]:.0f}px")
         print(f"[export] wrote {OUT} ({OUT.stat().st_size/1024:.0f} KB)")

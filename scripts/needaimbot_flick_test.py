@@ -19,7 +19,6 @@ def load_db(path):
 def gen(strokes, n, amp, modes, tol, seed=1):
     rng = np.random.default_rng(seed)
     dists = np.array([s[0] for s in strokes])
-    N = len(strokes[0][1])
     used = set()
     out = []
     for _ in range(n):
@@ -33,6 +32,7 @@ def gen(strokes, n, amp, modes, tol, seed=1):
             avail = [min(max(i,0),len(strokes)-1) for i in avail]
         i = int(rng.choice(avail)); used.add(i)
         _, s, t = strokes[i]
+        N = len(s)                                    # native point count (variable)
         # elastic coefficients (once per flick)
         EM = min(max(modes,1),8) if amp > 0 else 0
         ec = [rng.normal(0, amp/(j+1)) for j in range(EM)]
