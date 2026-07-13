@@ -1688,3 +1688,38 @@ data. A defender who holds a broad human DB and observes enough stays ahead; the
 contest is economic (make detection cost more than the cheat is worth), which is
 where challenge-response - defeating replay at the signal level rather than the
 statistics level - remains the decisive production answer.
+
+---
+
+# Hybrid stealth flick: the best practical low-detection bot
+
+Combining the findings into one generator (`hybrid_replay.py`): warp a
+native-resolution real stroke onto the target, then apply a PER-FLICK RANDOMIZED
+mix of an elastic smooth bend and a natural-variation step mag*(shape_A-shape_B).
+Randomizing both amplitudes per flick removes the consistent residual signature
+elastic alone leaves. Full detector battery:
+
+| detector | hybrid | note |
+|---|---|---|
+| single-move (strong) | 0.672 | below the 0.85 generation wall |
+| near-duplicate | 0.000 | unlimited diversity, passes basic checks |
+| residual-spectrum, PRIVATE pool | 0.655 | == baseline 0.645 -> signature blurred, evaded |
+| residual-spectrum, PUBLIC/known pool | 0.997 | caught (source is known) |
+| session-distribution | ~0.80 | finite-pool clustering, unchanged |
+
+**The randomization defeats the residual detector on a private pool** (0.655 vs
+elastic's 0.68), because the residual to the nearest real stroke is no longer a
+consistent smooth bend. The bot passes single-move, near-duplicate, and
+residual-on-private - i.e. it evades any realistic non-aggregating detector.
+
+**The two remaining catches are both data problems, not perturbation problems:**
+(a) if the attacker's pool is PUBLIC (Balabit), a residual-matching defender that
+holds the same data recovers each source and catches any modification at 0.997 -
+only a PRIVATE pool fixes this; (b) the finite pool still clusters, so the
+session-distribution detector catches it over a long enough session - only a
+larger K or account rotation fixes this. Perturbation engineering is now
+exhausted: the residual signature is removed, and what remains is the
+finite/public-data wall in its two aggregate forms. The best practical synthetic
+bot is this hybrid on a large PRIVATE pool with per-account caps - near-human on
+every single-session detector, beaten only by aggregate observation plus data the
+defender holds, exactly as the information-theoretic limit predicts.
