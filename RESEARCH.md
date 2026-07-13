@@ -1339,3 +1339,39 @@ variable-length / full-resolution generative model (autoregressive or
 continuous-time flow), a much larger effort that most likely meets the same
 finite-data generalization wall the whole project has documented. The from-scratch
 generation wall (~0.85) and the replay-only-reaches-0.5 conclusion both stand.
+
+---
+
+# Is the 48-point bottleneck fixable by resolution? Partly — it plateaus at ~0.62
+
+Diagnostic (no flow, no GPU): resample REAL strokes to N points (uniform-time
+linear interp) and score against full-resolution human with the strong detector.
+Real strokes are natively short — median 11 points (p10 8, p90 16) — so this is
+upsampling.
+
+| representation | strong-detector shape_only |
+|---|---|
+| resampled-real 24pt | 0.728 |
+| resampled-real 48pt | 0.677 |
+| resampled-real 192pt | 0.616 |
+| resampled-real 384pt | 0.636 |
+| (full-res replay, for reference) | 0.506 |
+
+More points helps (0.73 -> 0.62) but **plateaus around ~0.62 and never approaches
+0.50.** The residual floor is the re-representation itself: real strokes are
+sampled at irregular native times, and any resample to a uniform-time grid with
+linear interpolation alters the fine velocity/jerk kinematics no matter how many
+points are used. Resolution removes the coarse-grid artifact but not the
+re-parameterization tell.
+
+**This nails down why warped replay reaches 0.506 and nothing else does.** Warped
+replay keeps the stroke's EXACT native points and timing (rigid transform only);
+every other method — generation, latent anchoring, even a straight
+resample-of-a-real-stroke — re-represents the stroke and leaves a >=~0.62 tell. So
+the practical ceiling for any *diverse* (re-represented) construction on this data
+is ~0.62, while 0.50 is reachable only by exact replay of native samples, which is
+finite. A higher-resolution (192pt) flow-anchor could push the diverse-attack
+floor from ~0.74 toward ~0.62 — a real improvement over the ~0.85 generation wall,
+and it keeps diversity — but it cannot reach replay's 0.50. The finite-data wall
+holds; it just shows up as a re-representation floor once resolution is removed as
+a confound.
