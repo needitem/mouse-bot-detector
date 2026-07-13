@@ -1552,3 +1552,42 @@ human reference - partly a comparison artifact (a real anti-cheat compares
 aim-context motion to aim-context motion), partly the inherent cost of warping a
 recorded stroke onto an arbitrary target reach. Net: needaimbot's flick went from
 a ~0.85-band-adjacent 0.77 to ~0.66 with unlimited non-repeating diversity.
+
+---
+
+# Can needaimbot's flick reach 0.50? A DB-bias bug + the aim-context floor
+
+Chasing needaimbot's 0.70 flick down toward the 0.516 the offline
+warped_replay_generator reaches, two things surfaced.
+
+**(1) A real DB-bias bug.** The offline generator warps strokes drawn from the
+shuffled FULL human pool; export_flick_db.py instead took the first 6000 strokes
+in file order (session-ordered -> a few users' clustered shapes) and dropped any
+stroke over 64 points. Both biased the pool. Fixing it - shuffle before taking
+MAX_KEEP, raise the point cap to 256 (and kMaxPoints to match) - drops needaimbot
+pure replay from 0.637 to **0.517**, matching the offline 0.516. Neither
+resampling, rounding, nor distance-tolerance was the cause (all swept and ruled
+out); it was purely the biased pool.
+
+**(2) The comparison reference decides the rest.**
+
+| needaimbot flick scored against | strong-detector acc |
+|---|---|
+| ALL human movements (unbiased pool, no aim filter) | 0.517 |
+| ALL human movements (aim filter: straight, 30-2000px, 120-1600ms) | ~0.68 |
+| HUMAN AIM-FLICKS only (fair aim-context reference) | 0.675 (floor 0.509) |
+
+Against a diverse all-motion reference the warped flicks blend in (0.52). Against
+a reference that is specifically aim-flicks - narrow and uniform - the small speed
+distortion from scaling a recorded stroke onto an arbitrary target distance
+becomes visible (0.68). The aim-flick-vs-aim-flick floor is 0.509 (detector
+honest), so the 0.68 is real, not a bias: it is the inherent cost of warping to an
+arbitrary reach.
+
+**Conclusion.** 0.50 is reachable against a general (all-motion) detector by
+fixing the pool bias. Against an aim-flick-specific detector ~0.68 is the floor,
+because an aimbot must hit arbitrary distances and the scale warp distorts speed
+against the tight aim distribution - only replaying at the stroke's ORIGINAL reach
+gives 0.50, which forfeits arbitrary targeting (i.e. pure finite replay). Shipped
+fix: unbiased shuffled DB + 256-point cap, which improves both regimes (general
+0.77->0.52, aim-specific 0.70->0.68) and stacks with elastic's diversity.

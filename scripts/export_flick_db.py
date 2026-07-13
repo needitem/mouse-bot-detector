@@ -31,11 +31,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DATA = SCRIPT_DIR.parent / "data" / "processed" / "human_movements.jsonl"
 OUT = SCRIPT_DIR.parent / os.environ.get("OUTNAME","flick_trajectories.json")
 
-MAX_PTS        = 64      # cap for the C++ fixed array; native strokes are ~11-40 pts
+# Cap must match warped_replay.hpp kMaxPoints. Keep it high: a low cap drops
+# longer strokes and biases the pool, which inflated detectability (a strong
+# detector rose from ~0.52 to ~0.68 when the pool was the first-6000 file-order
+# strokes capped at 64 points; shuffling + a high cap fixes it).
+MAX_PTS        = int(os.environ.get("MAXPTS","256"))
 MIN_EFFICIENCY = float(os.environ.get("EFF","0.75"))
 MAX_LATERAL    = float(os.environ.get("LAT","0.15"))
-MIN_DIST       = 30.0
-MIN_DUR, MAX_DUR = 120.0, 1600.0
+MIN_DIST       = float(os.environ.get("MINDIST","30.0"))
+MIN_DUR = float(os.environ.get("MINDUR","120.0")); MAX_DUR = float(os.environ.get("MAXDUR","1600.0"))
 MAX_KEEP       = 6000
 
 
@@ -65,20 +69,25 @@ def canonical_native(pts):
         return None
     t = np.maximum.accumulate(t)
     return {"d": round(dist, 2),
-            "s": [[round(float(a), 4), round(float(b), 4)] for a, b in zip(ux, uy)],
-            "t": [round(float(tt), 1) for tt in t]}
+            "s": [[round(float(a), 8), round(float(b), 8)] for a, b in zip(ux, uy)],
+            "t": [round(float(tt), 3) for tt in t]}
 
 
 def main():
     kept, n_read = [], 0
-    with open(DATA) as f:
-        for line in f:
-            n_read += 1
-            rec = canonical_native(json.loads(line)["points"])
-            if rec is not None:
-                kept.append(rec)
-            if len(kept) >= MAX_KEEP:
-                break
+    # Shuffle before taking MAX_KEEP: the raw file is session-ordered, so the
+    # first 6000 strokes are a few users' clustered shapes - a biased pool that
+    # inflated detectability. A shuffled draw matches the full human distribution.
+    import random
+    _lines = open(DATA).readlines()
+    random.Random(0).shuffle(_lines)
+    for line in _lines:
+        n_read += 1
+        rec = canonical_native(json.loads(line)["points"])
+        if rec is not None:
+            kept.append(rec)
+        if len(kept) >= MAX_KEEP:
+            break
     kept.sort(key=lambda r: r["d"])
     OUT.write_text(json.dumps({"unit": "px", "n_pts": 0, "traj": kept}))  # n_pts=0 -> variable
     ds = [r["d"] for r in kept]
